@@ -13,6 +13,7 @@ Integrantes de Grupo:
 #include <stdio.h>
 #include <stdlib.h>
 #include <locale.h>
+#include <string.h> 
 
 // Estrutura da Data
 typedef struct {
@@ -20,6 +21,12 @@ typedef struct {
     int mes;
     int ano;
 } Data;
+
+// Estrutura do Cliente
+typedef struct {
+    char nome[100];
+    char codCliente[30];
+} Cliente;
 
 // Estrutura das vendas obtidos com base nas entadas do usuário e cálculos
 typedef struct {
@@ -30,6 +37,7 @@ typedef struct {
     float precoUnitario;
     float precoFinal;
     Data dataVenda;
+    Cliente cliente;
 } Venda;
 
 // Declaração das das funções e procedimentos presentes no código 
@@ -40,21 +48,23 @@ void realizarVenda(Venda vendas[], int *numVendas, float *faturamentoBruto, int 
 void listarVendasPorData(Venda vendas[], int numVendas, FILE *arquivo);
 void salvarDados(Venda vendas[], int numVendas, FILE *arquivo);
 void carregarDados(Venda vendas[], int *numVendas, FILE *arquivo);
+void encontrarItemMaisVendido(Venda vendas[], int numVendas);
+void encontrarItemMenosVendido(Venda vendas[], int numVendas);
 
-// Função Principal
+// Função principal
 int main() {
 
     // Corrigindo erros de Acentuação gráfica
     setlocale(LC_ALL, "Portuguese");
     int opcao;
 
-    // Variáveis de para verndas
+    // Variáveis de para vendas
     Venda vendas[100];
     float faturamentoBruto = 0;
     int numVendas = 0;
     int numClientes = 0;
 
-    // Abertura/criação do arquivo .dat com verificação de erros e condicional para função com apontador
+     // Abertura/criação do arquivo .dat com verificação de erros e condicional para função com apontador
     FILE *arquivo = fopen("loja_roupa.dat", "r+b");
     if (arquivo == NULL) {
         arquivo = fopen("loja_roupa.dat", "wb");
@@ -66,9 +76,8 @@ int main() {
         carregarDados(vendas, &numVendas, arquivo);
     }
 
+    // Menu Principal do Programa
     do {
-
-        // Menu Principal do Programa
         printf("\n|========== Loja de Roupas - Menu =======|\n");
         printf("| 1. Realizar uma venda                  |\n");
         printf("| 2. Listar vendas por data              |\n");
@@ -122,15 +131,17 @@ void imprimirRelatoriosPorData(Venda vendas[], int numVendas, float faturamentoB
     printf("Digite a data para consultar o relatório (dd/mm/yyyy): ");
     scanf("%d/%d/%d", &dataConsulta.dia, &dataConsulta.mes, &dataConsulta.ano);
 
-    // Relatório com loop para todas as vendas presentes no arquivo de dados de um dia específico que também é citado
+     // Relatório com loop para todas as vendas presentes no arquivo de dados de um dia específico que também é citado, além da procura e escrita do item mais e menos vendido
     printf("\n========== Relatorios para a data %02d/%02d/%04d ==========\n", dataConsulta.dia, dataConsulta.mes, dataConsulta.ano);
     printf("Numero de vendas realizadas: ");
+    encontrarItemMaisVendido(vendas, numVendas);
+    encontrarItemMenosVendido(vendas, numVendas);
 
     int vendasData = 0;
     float faturamentoData = 0;
     int clientesData = 0;
 
-    // Loop
+     // Loop
     for (int i = 0; i < numVendas; i++) {
         if (vendas[i].dataVenda.dia == dataConsulta.dia &&
             vendas[i].dataVenda.mes == dataConsulta.mes &&
@@ -142,7 +153,6 @@ void imprimirRelatoriosPorData(Venda vendas[], int numVendas, float faturamentoB
     }
 
     // Escrevendo na tela o faturamente bruto total da empresa, junto ao número de vendas e clientes que realizaram uma compra
-    printf("%d\n", vendasData);
     printf("Faturamento bruto total: R$ %.2f\n", faturamentoData);
     printf("Numero de clientes atendidos: %d\n", clientesData);
 
@@ -153,9 +163,9 @@ void imprimirRelatoriosPorData(Venda vendas[], int numVendas, float faturamentoB
             if (vendas[i].dataVenda.dia == dataConsulta.dia &&
                 vendas[i].dataVenda.mes == dataConsulta.mes &&
                 vendas[i].dataVenda.ano == dataConsulta.ano) {
-                printf("Codigo: %d, Item: %s, Marca: %s, Quantidade: %d, Preco Unitario: R$ %.2f, Preco Final: R$ %.2f\n",
+                printf("Codigo: %d, Item: %s, Marca: %s, Quantidade: %d, Preco Unitario: R$ %.2f, Preco Final: R$ %.2f, Cliente: %s, Código do Cliente: %s\n",
                        vendas[i].codigo, vendas[i].item, vendas[i].marca, vendas[i].quantidade,
-                       vendas[i].precoUnitario, vendas[i].precoFinal);
+                       vendas[i].precoUnitario, vendas[i].precoFinal, vendas[i].cliente.nome, vendas[i].cliente.codCliente);
             }
         }
     } else {
@@ -163,9 +173,9 @@ void imprimirRelatoriosPorData(Venda vendas[], int numVendas, float faturamentoB
     }
 }
 
-// Função para realização de vendas e carregamento dos valores no arquivo de dados
+// Função para realizar uma venda
 void realizarVenda(Venda vendas[], int *numVendas, float *faturamentoBruto, int *numClientes, FILE *arquivo) {
-    printf("Digite os detalhes dos itens: \n");
+    printf("Digite os detalhes da venda e do cliente: \n");
 
     while (1) {
         Venda venda;
@@ -186,19 +196,38 @@ void realizarVenda(Venda vendas[], int *numVendas, float *faturamentoBruto, int 
         scanf("%d", &venda.quantidade);
         printf("Entre com o preço unitário do item: ");
         scanf("%f", &venda.precoUnitario);
-        getchar();
+        getchar();  
 
-        // Data da venda para consulta de dados posterior
+        float precoFinalItem;
+
+        // Condicional da possibilidade de desconto de 10 porcento caso sejam comprados 3 itens ou mais de um mesmo produto específico
+        if (venda.quantidade >= 3) {
+            precoFinalItem = calcularPrecoFinal(venda) * 0.9;
+        } else {
+            precoFinalItem = calcularPrecoFinal(venda);
+        }
+
+        // Escrita na tela do valor do item adquirido + desconto caso tenha
+        if (venda.quantidade >= 3) {
+            venda.precoFinal = calcularPrecoFinal(venda) * 0.9;
+            printf("Preço Pago pelo(s) Item(s) com desconto de 10 Por cento: R$ %.2f\n", precoFinalItem);
+            
+        } else {
+            venda.precoFinal = calcularPrecoFinal(venda);
+            printf("Preço Pago pelo(s) Item(s): R$ %.2f\n", precoFinalItem);
+        }
+
+        // Nome e código do cliente para validar a existencia de um
+        printf("Digite o nome do cliente: ");
+        scanf("%s", venda.cliente.nome);
+        getchar();
+        printf("Digite o Código do cliente: ");
+        scanf("%s", venda.cliente.codCliente);
+
+        // Data da venda para consulta de dados posterior 
         printf("Digite a data da venda (dd/mm/yyyy): ");
         scanf("%d/%d/%d", &venda.dataVenda.dia, &venda.dataVenda.mes, &venda.dataVenda.ano);
         
-        // Condicional para a quantidade de um item específico na venda, visando aplicação de um desconto de 10% caso sejam 3 ou mais itens.
-        if (venda.quantidade >= 3) {
-            venda.precoFinal = calcularPrecoFinal(venda) * 0.9;
-        } else {
-            venda.precoFinal = calcularPrecoFinal(venda);
-        }
-
         // Valores obtidos
         *faturamentoBruto += venda.precoFinal;
         (*numClientes)++;
@@ -209,14 +238,19 @@ void realizarVenda(Venda vendas[], int *numVendas, float *faturamentoBruto, int 
     // Ordenação baseado na função de comparação
     qsort(vendas, *numVendas, sizeof(Venda), compararVendas);
 
+    // Busca pelo item mais e menos vendido
+    encontrarItemMaisVendido(vendas, *numVendas);
+    encontrarItemMenosVendido(vendas, *numVendas);
+
+    // Relatório de Vendas Geral
     printf("\n========== Relatorio de Vendas Geral ==========\n");
     for (int i = 0; i < *numVendas; i++) {
-        printf("Codigo: %d, Item: %s, Marca: %s, Quantidade: %d, Preco Unitario: R$ %.2f, Preco Final: R$ %.2f\n",
-               vendas[i].codigo, vendas[i].item, vendas[i].marca, vendas[i].quantidade,
-               vendas[i].precoUnitario, vendas[i].precoFinal);
+        printf("Codigo: %d, Item: %s, Marca: %s, Quantidade: %d, Preco Unitario: R$ %.2f, Preco Final: R$ %.2f, Data: %02d/%02d/%04d, Cliente: %s, Código do Cliente: %s\n",
+            vendas[i].codigo, vendas[i].item, vendas[i].marca, vendas[i].quantidade,
+            vendas[i].precoUnitario, vendas[i].precoFinal, vendas[i].dataVenda.dia, vendas[i].dataVenda.mes, vendas[i].dataVenda.ano, vendas[i].cliente.nome, vendas[i].cliente.codCliente);
     }
 
-    // Salva os dados atualizados no arquivo
+     // Salva os dados atualizados no arquivo
     salvarDados(vendas, *numVendas, arquivo);
 }
 
@@ -250,16 +284,46 @@ void listarVendasPorData(Venda vendas[], int numVendas, FILE *arquivo) {
     }
 }
 
-// Função para salvar os dados baseado na busca do ponteiro
+// Função para salvar os dados no arquivo
 void salvarDados(Venda vendas[], int numVendas, FILE *arquivo) {
     fseek(arquivo, 0, SEEK_SET);
     fwrite(&numVendas, sizeof(int), 1, arquivo);
     fwrite(vendas, sizeof(Venda), numVendas, arquivo);
 }
 
-// Função para consulta de dados baseado na busca do ponteiro
+// Função para carregar os dados do arquivo
 void carregarDados(Venda vendas[], int *numVendas, FILE *arquivo) {
     fseek(arquivo, 0, SEEK_SET);
     fread(numVendas, sizeof(int), 1, arquivo);
     fread(vendas, sizeof(Venda), *numVendas, arquivo);
+}
+
+// Função para encontrar o item mais vendido
+void encontrarItemMaisVendido(Venda vendas[], int numVendas) {
+    int maxVendas = 0;
+    char itemMaisVendido[100];
+
+    for (int i = 0; i < numVendas; i++) {
+        if (vendas[i].quantidade > maxVendas) {
+            maxVendas = vendas[i].quantidade;
+            strcpy(itemMaisVendido, vendas[i].item);
+        }
+    }
+
+    printf("\nO item mais vendido é: %s com %d unidades vendidas.\n", itemMaisVendido, maxVendas);
+}
+
+// Função para encontrar o item menos vendido
+void encontrarItemMenosVendido(Venda vendas[], int numVendas) {
+    int minVendas = vendas[0].quantidade;
+    char itemMenosVendido[100];
+
+    for (int i = 1; i < numVendas; i++) {
+        if (vendas[i].quantidade < minVendas) {
+            minVendas = vendas[i].quantidade;
+            strcpy(itemMenosVendido, vendas[i].item);
+        }
+    }
+
+    printf("\nO item menos vendido é: %s com %d unidades vendidas.\n", itemMenosVendido, minVendas);
 }
